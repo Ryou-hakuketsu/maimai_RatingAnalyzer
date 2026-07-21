@@ -117,49 +117,116 @@
             border-radius: 6px;
         }
 
-        /* 自訂 Combobox 樣式 */
-        .custom-combobox {
-            position: relative;
-            display: inline-block;
-        }
-
-        .combobox-options {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            width: 100%;
-            min-width: 90px;
-            max-height: 200px;
-            overflow-y: auto;
-            background: white;
+        /* 偽裝成輸入框的按鈕（不會召喚手機鍵盤） */
+        .select-trigger {
+            padding: 6px 12px;
+            font-size: 15px;
+            font-weight: bold;
             border: 1px solid var(--border-color);
             border-radius: 6px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            margin-top: 4px;
-            -webkit-overflow-scrolling: touch; /* 優化 iOS 滑動體驗 */
-        }
-
-        .combobox-options.show {
-            display: block;
-        }
-
-        .combobox-option {
-            padding: 10px 12px;
+            background: #ffffff;
             cursor: pointer;
-            font-size: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: space-between;
+            min-width: 70px;
             text-align: center;
-            transition: background 0.15s;
             user-select: none;
-            -webkit-user-select: none;
+            color: var(--text-color);
         }
 
-        .combobox-option:active,
-        .combobox-option:hover {
+        .select-trigger:after {
+            content: '▼';
+            font-size: 10px;
+            margin-left: 8px;
+            color: #666;
+        }
+
+        /* 跳出式 Modal 蒙版 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* 跳出式視窗內容 */
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 85%;
+            max-width: 320px;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            overflow: hidden;
+            animation: modalUp 0.2s ease-out;
+        }
+
+        @keyframes modalUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: 15px;
+            background: var(--header-bg);
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .modal-body {
+            overflow-y: auto;
+            max-height: 50vh;
+            padding: 5px 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .modal-option {
+            padding: 12px;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 500;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .modal-option:last-child {
+            border-bottom: none;
+        }
+
+        .modal-option:active {
             background-color: #eef5fc;
             color: var(--primary);
             font-weight: bold;
+        }
+
+        .modal-cancel {
+            padding: 12px;
+            text-align: center;
+            background: #f8fafc;
+            color: #666;
+            font-weight: bold;
+            border-top: 1px solid var(--border-color);
+            cursor: pointer;
         }
 
         .legend {
@@ -285,15 +352,10 @@
     <!-- 對照表卡片 -->
     <div class="card">
         <div class="table-controls">
-            <!-- 支援手機觸控相容的自訂 Combobox -->
+            <!-- 點擊觸發 Modal 的按鈕 -->
             <div class="control-item">
-                <label for="base-lv"><b>基底等級 (Lv)：</b></label>
-                <div class="custom-combobox">
-                    <input type="text" id="base-lv" value="" placeholder="14" style="width: 80px;" autocomplete="off" inputmode="numeric">
-                    <div class="combobox-options" id="base-lv-options">
-                        <!-- 動態生成 1~15 -->
-                    </div>
-                </div>
+                <label><b>基底等級 (Lv)：</b></label>
+                <div class="select-trigger" id="base-lv-btn">14</div>
             </div>
 
             <div class="control-item">
@@ -343,7 +405,20 @@
     </div>
 </div>
 
+<!-- 跳出式對話框 Modal -->
+<div class="modal-overlay" id="base-lv-modal">
+    <div class="modal-content">
+        <div class="modal-header">選擇基底等級 (Lv)</div>
+        <div class="modal-body" id="modal-options-list">
+            <!-- 倒數選單 (15 ~ 1) JS 動態生成 -->
+        </div>
+        <div class="modal-cancel" id="modal-cancel-btn">取消</div>
+    </div>
+</div>
+
 <script>
+    let currentBaseLv = 14;
+
     const ratingRules = [
         { rank: 'SSS+', border: 1.005,    coeff: 22.4, rowspan: 1 },
         { rank: 'SSS',  border: 1.004999, coeff: 22.2, rowspan: 2 },
@@ -452,80 +527,46 @@
         renderTable();
     }
 
-    function handleBaseLvInput() {
-        const baseLvInput = document.getElementById('base-lv');
-        baseLvInput.value = baseLvInput.value.replace(/[^0-9]/g, '');
-        renderTable();
-        updateCalculator();
-    }
+    // 初始化 Modal 彈窗選單 (倒數 15 ~ 1)
+    function initModalSelect() {
+        const btn = document.getElementById('base-lv-btn');
+        const modal = document.getElementById('base-lv-modal');
+        const list = document.getElementById('modal-options-list');
+        const cancelBtn = document.getElementById('modal-cancel-btn');
 
-    // 相容桌面與手機端的 Combobox 控制 logic
-    function initBaseLvCombobox() {
-        const baseLvInput = document.getElementById('base-lv');
-        const optionsContainer = document.getElementById('base-lv-options');
-
-        // 生成 1 ~ 15 選項
-        let optionsHTML = '';
-        for (let i = 1; i <= 15; i++) {
-            optionsHTML += `<div class="combobox-option" data-value="${i}">${i}</div>`;
+        // 生成倒數 15 到 1 的選項
+        let html = '';
+        for (let i = 15; i >= 1; i--) {
+            html += `<div class="modal-option" data-value="${i}">${i}</div>`;
         }
-        optionsContainer.innerHTML = optionsHTML;
+        list.innerHTML = html;
 
-        const showMenu = (e) => {
-            if (e) e.stopPropagation();
-            optionsContainer.classList.add('show');
-        };
+        const openModal = () => modal.classList.add('active');
+        const closeModal = () => modal.classList.remove('active');
 
-        const hideMenu = () => {
-            optionsContainer.classList.remove('show');
-        };
+        btn.addEventListener('click', openModal);
+        cancelBtn.addEventListener('click', closeModal);
 
-        // 事件綁定（兼顧 click、focus 與觸控事件）
-        baseLvInput.addEventListener('click', showMenu);
-        baseLvInput.addEventListener('focus', (e) => {
-            showMenu(e);
-            baseLvInput.select(); // 手機點擊時自動全選內容，方便直接更換
+        // 點擊蒙版區域自動關閉
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
         });
-        baseLvInput.addEventListener('touchstart', showMenu, { passive: true });
 
-        // 選擇選項（同時處理 mouseup 與 touchend 避免手機延遲）
-        const handleSelect = (e) => {
-            const target = e.target.closest('.combobox-option');
-            if (target) {
-                e.preventDefault();
-                e.stopPropagation();
-                const val = target.getAttribute('data-value');
-                baseLvInput.value = val;
-                hideMenu();
-                baseLvInput.blur(); // 隱藏鍵盤
-                handleBaseLvInput();
-            }
-        };
-
-        optionsContainer.addEventListener('touchend', handleSelect);
-        optionsContainer.addEventListener('click', handleSelect);
-
-        // 點擊頁面其他地方關閉選單
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.custom-combobox')) {
-                hideMenu();
+        // 選擇項目
+        list.addEventListener('click', (e) => {
+            const opt = e.target.closest('.modal-option');
+            if (opt) {
+                currentBaseLv = parseInt(opt.getAttribute('data-value'), 10);
+                btn.innerText = currentBaseLv;
+                closeModal();
+                renderTable();
             }
         });
-        document.addEventListener('touchstart', (e) => {
-            if (!e.target.closest('.custom-combobox')) {
-                hideMenu();
-            }
-        }, { passive: true });
     }
 
     function renderTable() {
-        const baseLvInput = document.getElementById('base-lv');
+        let baseLv = currentBaseLv;
 
-        let baseLv = parseInt(baseLvInput.value, 10);
-        if (isNaN(baseLv)) {
-            baseLv = 14;
-        }
-        
         const targetScoreVal = document.getElementById('target-score').value.trim();
         const targetScore = targetScoreVal === '' ? null : parseInt(targetScoreVal, 10);
 
@@ -593,15 +634,12 @@
 
     document.getElementById('calc-lv').addEventListener('input', updateCalculator);
     document.getElementById('calc-achieve').addEventListener('input', updateCalculator);
-    
-    const baseLvEl = document.getElementById('base-lv');
-    baseLvEl.addEventListener('input', handleBaseLvInput);
 
     document.getElementById('target-score').addEventListener('input', renderTable);
     document.getElementById('target-achieve').addEventListener('input', handleTargetAchieveInput);
 
-    // 初始化選單與對照表
-    initBaseLvCombobox();
+    // 初始化 Modal 彈窗與數據
+    initModalSelect();
     renderTable();
     updateCalculator();
 </script>
