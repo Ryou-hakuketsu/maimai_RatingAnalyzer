@@ -117,6 +117,47 @@
             border-radius: 6px;
         }
 
+        /* 自訂 Combobox 樣式 */
+        .custom-combobox {
+            position: relative;
+            display: inline-block;
+        }
+
+        .combobox-options {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            min-width: 80px;
+            max-height: 180px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+            margin-top: 4px;
+        }
+
+        .combobox-options.show {
+            display: block;
+        }
+
+        .combobox-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            text-align: center;
+            transition: background 0.15s;
+        }
+
+        .combobox-option:hover {
+            background-color: #eef5fc;
+            color: var(--primary);
+            font-weight: bold;
+        }
+
         .legend {
             display: flex;
             gap: 10px;
@@ -170,7 +211,6 @@
             background-color: #f8fafc;
         }
 
-        /* 計算出來的 Rating 數據字體加粗 */
         .rating-val {
             font-weight: bold;
             font-size: 15px;
@@ -190,7 +230,7 @@
             color: #fff;
         }
 
-        /* 雙層高對比醒目框選樣式 (深藍框 + 內側亮白襯線) */
+        /* 雙層高對比醒目框選樣式 */
         td.hl-cell {
             border-top: 3px solid #1d4ed8 !important;
             border-bottom: 3px solid #1d4ed8 !important;
@@ -241,12 +281,15 @@
     <!-- 對照表卡片 -->
     <div class="card">
         <div class="table-controls">
+            <!-- 自訂可兼顧輸入與無過濾下拉選單的 Combobox -->
             <div class="control-item">
                 <label for="base-lv"><b>基底等級 (Lv)：</b></label>
-                <input type="number" id="base-lv" step="1" min="1" max="99" maxlength="2" value="" placeholder="14" 
-                       onkeydown="return event.key !== '.' && event.key !== 'e' && event.key !== 'E' && event.key !== '-'"
-                       oninput="if(this.value.length > 2) this.value = this.value.slice(0, 2);"
-                       style="width: 70px;">
+                <div class="custom-combobox">
+                    <input type="text" id="base-lv" value="" placeholder="14" style="width: 80px;" autocomplete="off">
+                    <div class="combobox-options" id="base-lv-options">
+                        <!-- 選項由 JS 或 HTML 動態填入 1~15 -->
+                    </div>
+                </div>
             </div>
 
             <div class="control-item">
@@ -256,7 +299,7 @@
 
             <div class="control-item">
                 <label for="target-achieve"><b>達成率 (%)：</b></label>
-                <input type="number" id="target-achieve" step="0.0001" min="0" max="100.5000" value="" placeholder="選填" style="width: 100px;">
+                <input type="text" id="target-achieve" inputmode="decimal" value="" placeholder="選填" style="width: 100px;">
             </div>
 
             <!-- 圖例說明 -->
@@ -282,17 +325,14 @@
                     <tr id="header-row-1">
                         <th rowspan="2">Rank</th>
                         <th rowspan="2">ボーダー<br>達成率</th>
-                        <!-- 動態插入 Lv. 跨欄 -->
                         <th colspan="11">Lv.</th>
                         <th rowspan="2">ボーダー<br>達成率</th>
                         <th rowspan="2">評価<br>係数</th>
                     </tr>
                     <tr id="header-row-2">
-                        <!-- 動態插入具體 Lv 數值 -->
                     </tr>
                 </thead>
                 <tbody id="table-body">
-                    <!-- 動態生成數據 -->
                 </tbody>
             </table>
         </div>
@@ -300,7 +340,6 @@
 </div>
 
 <script>
-    // 評級數據與門檻對照表
     const ratingRules = [
         { rank: 'SSS+', border: 1.005,    coeff: 22.4, rowspan: 1 },
         { rank: 'SSS',  border: 1.004999, coeff: 22.2, rowspan: 2 },
@@ -387,9 +426,10 @@
         const inputEl = document.getElementById('target-achieve');
         let val = inputEl.value;
 
-        if (val === '') {
-            renderTable();
-            return;
+        val = val.replace(/[^0-9.]/g, '');
+        const dotParts = val.split('.');
+        if (dotParts.length > 2) {
+            val = dotParts[0] + '.' + dotParts.slice(1).join('');
         }
 
         if (val.includes('.')) {
@@ -400,24 +440,63 @@
         }
 
         let num = parseFloat(val);
-        if (!isNaN(num)) {
-            if (num > 100.5) {
-                val = '100.5000';
-            } else if (num < 0) {
-                val = '0';
-            }
+        if (!isNaN(num) && num > 100.5) {
+            val = '100.5';
         }
 
         inputEl.value = val;
         renderTable();
     }
 
+    function handleBaseLvInput() {
+        const baseLvInput = document.getElementById('base-lv');
+        baseLvInput.value = baseLvInput.value.replace(/[^0-9]/g, '');
+        renderTable();
+        updateCalculator();
+    }
+
+    // 初始化並處理自訂基底等級選單 (Combobox)
+    function initBaseLvCombobox() {
+        const baseLvInput = document.getElementById('base-lv');
+        const optionsContainer = document.getElementById('base-lv-options');
+
+        // 生成 1 ~ 15 選項
+        let optionsHTML = '';
+        for (let i = 1; i <= 15; i++) {
+            optionsHTML += `<div class="combobox-option" data-value="${i}">${i}</div>`;
+        }
+        optionsContainer.innerHTML = optionsHTML;
+
+        // 點擊輸入框時，顯示完整選項選單
+        baseLvInput.addEventListener('click', (e) => {
+            e.stopPropagation();
+            optionsContainer.classList.add('show');
+        });
+
+        baseLvInput.addEventListener('focus', () => {
+            optionsContainer.classList.add('show');
+        });
+
+        // 點擊選單項目
+        optionsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('combobox-option')) {
+                const val = e.target.getAttribute('data-value');
+                baseLvInput.value = val;
+                optionsContainer.classList.remove('show');
+                handleBaseLvInput();
+            }
+        });
+
+        // 點擊頁面其他地方時關閉選單
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.custom-combobox')) {
+                optionsContainer.classList.remove('show');
+            }
+        });
+    }
+
     function renderTable() {
         const baseLvInput = document.getElementById('base-lv');
-        
-        if (baseLvInput.value.length > 2) {
-            baseLvInput.value = baseLvInput.value.slice(0, 2);
-        }
 
         let baseLv = parseInt(baseLvInput.value, 10);
         if (isNaN(baseLv)) {
@@ -493,18 +572,13 @@
     document.getElementById('calc-achieve').addEventListener('input', updateCalculator);
     
     const baseLvEl = document.getElementById('base-lv');
-    baseLvEl.addEventListener('input', () => {
-        renderTable();
-        updateCalculator();
-    });
-    baseLvEl.addEventListener('change', () => {
-        renderTable();
-        updateCalculator();
-    });
+    baseLvEl.addEventListener('input', handleBaseLvInput);
 
     document.getElementById('target-score').addEventListener('input', renderTable);
     document.getElementById('target-achieve').addEventListener('input', handleTargetAchieveInput);
 
+    // 初始化下拉選單與表格渲染
+    initBaseLvCombobox();
     renderTable();
     updateCalculator();
 </script>
