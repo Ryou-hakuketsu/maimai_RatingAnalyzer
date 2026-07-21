@@ -129,15 +129,16 @@
             top: 100%;
             left: 0;
             width: 100%;
-            min-width: 80px;
-            max-height: 180px;
+            min-width: 90px;
+            max-height: 200px;
             overflow-y: auto;
             background: white;
             border: 1px solid var(--border-color);
             border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
             margin-top: 4px;
+            -webkit-overflow-scrolling: touch; /* 優化 iOS 滑動體驗 */
         }
 
         .combobox-options.show {
@@ -145,13 +146,16 @@
         }
 
         .combobox-option {
-            padding: 8px 12px;
+            padding: 10px 12px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 15px;
             text-align: center;
             transition: background 0.15s;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
+        .combobox-option:active,
         .combobox-option:hover {
             background-color: #eef5fc;
             color: var(--primary);
@@ -281,13 +285,13 @@
     <!-- 對照表卡片 -->
     <div class="card">
         <div class="table-controls">
-            <!-- 自訂可兼顧輸入與無過濾下拉選單的 Combobox -->
+            <!-- 支援手機觸控相容的自訂 Combobox -->
             <div class="control-item">
                 <label for="base-lv"><b>基底等級 (Lv)：</b></label>
                 <div class="custom-combobox">
-                    <input type="text" id="base-lv" value="" placeholder="14" style="width: 80px;" autocomplete="off">
+                    <input type="text" id="base-lv" value="" placeholder="14" style="width: 80px;" autocomplete="off" inputmode="numeric">
                     <div class="combobox-options" id="base-lv-options">
-                        <!-- 選項由 JS 或 HTML 動態填入 1~15 -->
+                        <!-- 動態生成 1~15 -->
                     </div>
                 </div>
             </div>
@@ -455,7 +459,7 @@
         updateCalculator();
     }
 
-    // 初始化並處理自訂基底等級選單 (Combobox)
+    // 相容桌面與手機端的 Combobox 控制 logic
     function initBaseLvCombobox() {
         const baseLvInput = document.getElementById('base-lv');
         const optionsContainer = document.getElementById('base-lv-options');
@@ -467,32 +471,51 @@
         }
         optionsContainer.innerHTML = optionsHTML;
 
-        // 點擊輸入框時，顯示完整選項選單
-        baseLvInput.addEventListener('click', (e) => {
-            e.stopPropagation();
+        const showMenu = (e) => {
+            if (e) e.stopPropagation();
             optionsContainer.classList.add('show');
-        });
+        };
 
-        baseLvInput.addEventListener('focus', () => {
-            optionsContainer.classList.add('show');
-        });
+        const hideMenu = () => {
+            optionsContainer.classList.remove('show');
+        };
 
-        // 點擊選單項目
-        optionsContainer.addEventListener('click', (e) => {
-            if (e.target.classList.contains('combobox-option')) {
-                const val = e.target.getAttribute('data-value');
+        // 事件綁定（兼顧 click、focus 與觸控事件）
+        baseLvInput.addEventListener('click', showMenu);
+        baseLvInput.addEventListener('focus', (e) => {
+            showMenu(e);
+            baseLvInput.select(); // 手機點擊時自動全選內容，方便直接更換
+        });
+        baseLvInput.addEventListener('touchstart', showMenu, { passive: true });
+
+        // 選擇選項（同時處理 mouseup 與 touchend 避免手機延遲）
+        const handleSelect = (e) => {
+            const target = e.target.closest('.combobox-option');
+            if (target) {
+                e.preventDefault();
+                e.stopPropagation();
+                const val = target.getAttribute('data-value');
                 baseLvInput.value = val;
-                optionsContainer.classList.remove('show');
+                hideMenu();
+                baseLvInput.blur(); // 隱藏鍵盤
                 handleBaseLvInput();
             }
-        });
+        };
 
-        // 點擊頁面其他地方時關閉選單
+        optionsContainer.addEventListener('touchend', handleSelect);
+        optionsContainer.addEventListener('click', handleSelect);
+
+        // 點擊頁面其他地方關閉選單
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.custom-combobox')) {
-                optionsContainer.classList.remove('show');
+                hideMenu();
             }
         });
+        document.addEventListener('touchstart', (e) => {
+            if (!e.target.closest('.custom-combobox')) {
+                hideMenu();
+            }
+        }, { passive: true });
     }
 
     function renderTable() {
@@ -577,7 +600,7 @@
     document.getElementById('target-score').addEventListener('input', renderTable);
     document.getElementById('target-achieve').addEventListener('input', handleTargetAchieveInput);
 
-    // 初始化下拉選單與表格渲染
+    // 初始化選單與對照表
     initBaseLvCombobox();
     renderTable();
     updateCalculator();
